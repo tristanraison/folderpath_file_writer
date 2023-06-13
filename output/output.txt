@@ -1,0 +1,563 @@
+dashboard_functions.py
+__________________________________________________
+
+import pandas as pd
+import os
+import plotly.express as px
+
+from dash import html, dcc
+from dash.dependencies import Input, Output
+
+from functions.visualization_functions import create_distribution_price_per_meter_graph, create_bar_hist_advert_per_city, generate_component
+
+
+def create_layout(app, rent_data, sale_data):
+    options = [{"label": "Sale", "value": "sale"},
+               {"label": "Rent", "value": "rent"},
+               {"label": "All", "value": "all"},]
+
+    @app.callback(
+        Output("graph", "children"),
+        [Input("property-type", "value")],
+    )
+    def update_graph(selected_value):
+        # call function to generate HTML component based on selected value
+        component = generate_component(selected_value, sale_data, rent_data)
+
+        # return HTML component
+        return component
+
+    return html.Div(
+        [
+            html.H1("Estate Dashboard", style={"textAlign": "center"}),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Label("Select Sale or Rent"),
+                            dcc.Dropdown(
+                                id="property-type",
+                                options=options,
+                                value="sale",
+                                className="dark-dropdown",
+                                style={"width": "100%",
+                                       "margin-bottom": "20px"}
+                            ),
+                        ],
+                        className="dropdown-container",
+                    ),
+                ], className="top-container",
+            ),
+            html.Div(
+
+                id="graph",
+                className="graph-container",
+            ),
+
+        ],
+        className="dashboard",
+    )
+
+
+def create_sale_figure(sale_dataset):
+    # create a sample figure for sale data
+    fig = create_distribution_price_per_meter_graph(sale_dataset)
+    return fig
+
+
+def create_rent_figure(rent_dataset):
+    # create a sample figure for rent data
+    fig = create_distribution_price_per_meter_graph(rent_dataset)
+    return fig
+
+
+def create_all_figure(sale_dataset, rent_dataset):
+    # create a sample figure for all data
+    return {}
+
+# define the callbacks
+
+
+dataProcess.py
+__________________________________________________
+
+import plotly.express as px
+import pandas as pd
+
+from functions.functions_utils import check_variable_exists
+
+
+def mainDataProcess(dataset):
+    return 1
+
+
+def create_ppsm_hist(data):
+    fig = px.histogram(data, x="price_per_meter",
+                       color="address", template="plotly_dark")
+    return fig
+
+
+def create_ppsm_bar(data):
+    fig = px.bar(data, x='address', y='price_per_meter',
+                 template="plotly_dark")
+    return fig
+
+
+def aggregate_data_by_city(dataframe):
+    """
+    Aggregates a dataframe by city.
+
+    Args:
+        dataframe (pandas.DataFrame): The dataframe to be aggregated. It must have an "address" column.
+
+    Returns:
+        pandas.DataFrame: A new dataframe with the aggregated data.
+    """
+
+    # Group the dataframe by city and calculate the mean price per meter, the number of ads, and the median size of the apartment.
+    agg_df = dataframe.groupby("address").agg(
+        price_per_meter_mean=("price_per_meter", "mean"),
+        ad_count=("estate_type_id", "count"),
+        apartment_size_median=("area", "median"),
+    ).reset_index()
+
+    agg_df = pd.DataFrame(agg_df)
+
+    return agg_df
+    # return agg_df.to_dict('records')
+
+
+functions_utils.py
+__________________________________________________
+
+import os
+import datetime
+import pandas as pd
+
+
+def getDataFileName(excel_file_name, folderPath):
+    # Chemin du dossier Output
+    workinkDirectoryPath = os.getcwd()
+
+    # Chemin d'accès et nom du fichier Excel
+    now_date = datetime.datetime.now().strftime("%Y_%m_%d")
+    excel_file_name = excel_file_name + now_date + ".xlsx"
+
+    output_filePath = os.path.join(folderPath, excel_file_name)
+
+    return output_filePath
+
+
+def export_to_excel(dataframe, outputFolderPath, outputFileName):
+    file_path = getDataFileName(
+        excel_file_name=outputFileName, folderPath=outputFolderPath)
+    writer = pd.ExcelWriter(file_path, engine='xlsxwriter')
+    dataframe.to_excel(writer, index=False)
+    writer.save()
+
+
+def create_directory(path, folder_name):
+    if not os.path.exists(path):
+        return f"Error: The path {path} does not exist."
+    elif not os.path.isdir(path):
+        return f"Error: {path} is not a directory."
+    else:
+        folder_path = os.path.join(path, folder_name)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+            return f"The folder {folder_name} has been created in {path}."
+        else:
+            return f"The folder {folder_name} already exists in {path}."
+
+
+def convertXlsxToPd(xlsxFilePath):
+
+    return -1
+
+
+def check_variable_exists(df, var_name):
+    """
+    Check if the specified var_name is present in the dataframe.
+
+    Args:
+        df (pandas.DataFrame): The dataframe to check.
+        col_name (str): The name of the column to look for.
+
+    Returns:
+        bool: True if the var_name is present in the dataframe, False otherwise.
+    """
+    try:
+        df[var_name]
+        return True
+    except KeyError:
+        print(var_name + " unfound var")
+        return False
+
+
+importData.py
+__________________________________________________
+
+import gspread
+import os
+import pandas as pd
+
+from oauth2client.service_account import ServiceAccountCredentials
+from functions.functions_utils import export_to_excel
+
+
+def import_data_from_google_docs(google_key_json_file_path, data_urls, output_folder_path):
+    mainImportData(google_key_json_file_path, data_urls['seloger_sale'], os.path.join(
+        output_folder_path, "sale"), "seloger_data_sale_")
+    mainImportData(google_key_json_file_path, data_urls['seloger_rent'], os.path.join(
+        output_folder_path, "rent"), "seloger_data_rent_")
+
+
+def load_dataset(output_folder_path, sale_data_filename, rent_data_filename):
+    sale_data = getDatedOutputFile(
+        output_folder_path, sale_data_filename)
+    rent_data = getDatedOutputFile(
+        output_folder_path, rent_data_filename)
+    return sale_data, rent_data
+
+
+def mainImportData(googleKeyJsonFilePath, googleDataFileUrl, output_folder_path, virginDateFileName):
+    """
+    Imports data from the specified Google Sheet data file using the specified Google key JSON file path and output folder path.
+    Uses the importDataFromGoogleSheet() function to import the data and save it as a CSV file with the specified file prefix.
+
+    Args:
+        google_key_json_file_path (str): The file path for the Google key JSON file.
+        google_data_file_url (str): The URL for the Google Sheet data file.
+        output_folder_path (str): The folder path for saving the imported data file.
+        file_prefix (str): The prefix to use for the imported data file.
+
+    Returns:ë
+        None
+    """
+
+    google_data = importDataFromGoogleSheet(
+        googleKeyJsonFilePath, googleDataFileUrl)
+    df = pd.DataFrame(google_data)
+
+    export_to_excel(df,
+                    output_folder_path,
+                    virginDateFileName)
+
+
+def importDataFromGoogleSheet(googleKeyJsonFilePath, googleDataFileUrl):
+    """
+    Imports data from a Google Sheet using the specified key JSON file path and data file URL.
+    Saves the imported data as a CSV file in the specified output folder path using the specified file prefix.
+
+    Args:
+        google_key_json_file_path (str): The file path for the Google key JSON file.
+        google_data_file_url (str): The URL for the Google Sheet data file.
+        output_folder_path (str): The folder path for saving the imported data file.
+        file_prefix (str): The prefix to use for the imported data file.
+
+    Returns:
+        None
+    """
+    try:
+        scope = ['https://www.googleapis.com/auth/drive']
+        # create the credentials object
+        creds = ServiceAccountCredentials.from_json_keyfile_name(
+            googleKeyJsonFilePath, scope)
+
+        # authorize the client sheet
+        client = gspread.authorize(creds)
+
+        # open the google sheet
+        sheet = client.open_by_url(googleDataFileUrl).sheet1
+
+        # get all the data from the sheet
+        data = sheet.get_all_records()
+
+        print(
+            "Data successfully imported from ${googleDataFileUrl} google sheet")
+
+        return data
+    except Exception as e:
+        print(
+            f"An error occurred while importing data from {googleDataFileUrl}: {str(e)}")
+
+
+def getDatedOutputFile(_folderPath, _dateToFind):
+    """
+    Gets the latest dated output file in the specified output folder path with the specified file prefix.
+
+    Args:
+        output_folder_path (str): The folder path for the output files.
+        file_prefix (str): The prefix of the output files.
+
+    Returns:
+        pandas.DataFrame: The latest dated output file as a Pandas DataFrame.
+    """
+    files = os.listdir(_folderPath)
+    if len(files) < 1:
+        print("no file found")
+        return None
+    for file_name in files:
+        if _dateToFind in file_name:
+            data = pd.read_excel(os.path.join(_folderPath, file_name))
+            return data
+    return None
+
+# KO
+
+
+def get_dated_data_files(folder_path, filename_format):
+    """
+    Get the list of data files in the specified folder.
+
+    Args:
+    - folder_path: string representing the folder path containing the data files
+
+    Returns:
+    - data_files: list of strings representing the paths of the data files
+    """
+
+    data_files = []
+    for file_name in os.listdir(folder_path):
+        if file_name.endswith(".xlsx"):
+            # Extract the date part from the filename
+            date_parts = file_name.split("_")[-4:]
+            if len(date_parts) == 4:
+                year, month, day = date_parts[1], date_parts[2], date_parts[3]
+                # Remove the file extension from the last part
+                day = os.path.splitext(day)[0]
+                # Check if the date parts are valid
+                if year.isdigit() and month.isdigit() and day.isdigit():
+                    date = f"{year}-{month}-{day}"
+                    data_files[date] = getDatedOutputFile(
+                        folder_path, filename_format + year + "_" + month + "_" + day)
+
+    # Filter out empty or null DataFrames
+    data_files = {date: df for date, df in data_files.items(
+    ) if not df.empty and df.notnull().values.any()}
+
+    return data_files
+
+
+visualization_functions.py
+__________________________________________________
+
+
+import plotly.express as px
+import dash
+
+from functions.functions_utils import check_variable_exists
+from functions.dataProcess import aggregate_data_by_city
+
+from dash import dcc, html, dash_table
+import pandas as pd
+
+from dash.dash_table import DataTable
+from dash.dash_table.Format import Format
+
+
+def create_histogram(data, x_var, color_var):
+    """
+    Creates a histogram using the specified dataset, x variable name, and color variable name.
+
+    Args:
+    - data: pandas DataFrame containing the dataset
+    - x_var: string representing the name of the variable to use for the x-axis
+    - color_var: string representing the name of the variable to use for the color scale
+
+    Returns:
+    - fig: plotly figure object containing the histogram
+    """
+    if check_variable_exists(data, x_var):
+        fig = px.histogram(data, x=x_var, color=color_var,
+                           template="plotly_dark")
+        return fig
+    else:
+        return None
+
+
+def create_bar_histogram(data, x_var, y_var, color_var):
+    if check_variable_exists(data, x_var):
+        fig = px.bar(data, x=x_var, y=y_var, color=color_var,
+                     template="plotly_dark")
+        return fig
+    else:
+        return None
+
+
+def create_distribution_price_per_meter_graph(data):
+    """
+    Creates a price per meter graph using the specified dataset.
+
+    Args:
+    - data: pandas DataFrame containing the dataset
+
+    Returns:
+    - fig: plotly figure object containing the price per meter graph
+    """
+    fig = create_histogram(data, "price_per_meter", "address")
+    return fig
+
+
+def create_bar_hist_advert_per_city(data):
+    """
+    Creates graph showing number of adverts by city using the specified dataset.
+
+    Args:
+    - data: pandas DataFrame containing the dataset
+
+    Returns:
+    - fig: plotly figure object containing the count of ad per city
+    """
+    fig = create_bar_histogram(data, "address", "estate_type_id", "address")
+    return fig
+
+
+def format_price_per_meter(val):
+    return f"${val:,.2f}"
+
+
+def create_table_from_pd_df(data):
+    return dash_table.DataTable(
+        id='table',
+        columns=[
+            {'name': 'address', 'id': 'address'},
+            {'name': 'price_per_meter_mean', 'id': 'price_per_meter_mean',
+             'type': 'numeric', 'format': Format(precision=4)},
+            {'name': 'ad_count', 'id': 'ad_count',
+             'type': 'numeric', 'format': Format(precision=4)},
+            {'name': 'apartment_size_median', 'id': 'apartment_size_median',
+             'type': 'numeric', 'format': Format(precision=4)},
+        ],
+        data=data.to_dict('records'),
+        style_as_list_view=True,
+        style_header={'backgroundColor': 'rgb(30, 30, 30)'},
+        style_cell_conditional=[{'if': {'column_id': 'price_per_meter_mean'},
+                                 'textAlign': 'right'},
+                                {'if': {
+                                    'column_id': 'ad_count'}, 'textAlign': 'center'},
+                                {'if': {'column_id': 'apartment_size_median'},
+                                 'textAlign': 'right'}],
+        style_cell={
+            'backgroundColor': 'rgb(50, 50, 50)',
+            'color': 'white'
+        }
+    )
+
+
+def generate_component(selected_value, sale_data, rent_data):
+    # create different components based on selected value
+    if selected_value == "sale":
+
+        city_agg_sale_dataset = aggregate_data_by_city(sale_data)
+
+        # generate HTML component for sale data
+        chart1 = dcc.Graph(
+            id='sale-chart1',
+            figure=create_bar_hist_advert_per_city(sale_data))
+        chart2 = dcc.Graph(
+            id='sale-chart2', figure=create_distribution_price_per_meter_graph(sale_data))
+        # table = dash_table.DataTable(
+        #     id='sale-table', data=aggregate_data_by_city(sale_data))
+        text = html.P('This is a paragraph of text for sale data.')
+        headline = html.H3('Sale Data')
+
+        sale_aggregate_price_per_meter_chart = dcc.Graph(
+            id="test_graph",
+            figure=create_bar_histogram(
+                city_agg_sale_dataset, y_var="price_per_meter_mean", x_var="address", color_var="price_per_meter_mean")
+        )
+
+        sale_aggregate_table = create_table_from_pd_df(city_agg_sale_dataset)
+
+        component = html.Div(
+            [headline, text, chart1, chart2, sale_aggregate_price_per_meter_chart, sale_aggregate_table], style={"width": "100%"})
+
+    elif selected_value == "rent":
+        # generate HTML component for rent data
+        chart1 = dcc.Graph(
+            id='rent-chart1', figure=create_bar_hist_advert_per_city(rent_data))
+        chart2 = dcc.Graph(
+            id='rent-chart2', figure=create_distribution_price_per_meter_graph(rent_data))
+        # table = dash_table.DataTable(
+        #     id='rent-table', data=aggregate_data_by_city(rent_data))
+        text = html.P('This is a paragraph of text for rent data.')
+        headline = html.H3('Rent Data')
+        component = html.Div(
+            [headline, text, chart1, chart2], style={"width": "100%"})
+
+    else:
+        # generate HTML component for all data
+        chart1 = dcc.Graph(
+            id='all-chart1',
+            figure=create_bar_hist_advert_per_city(sale_data))
+        chart2 = dcc.Graph(
+            id='all-chart2', figure=create_distribution_price_per_meter_graph(sale_data))
+        text = html.P('This is a paragraph of text for all data.')
+        # table = dash_table.DataTable(
+        #     id='rent-table', data=aggregate_data_by_city(rent_data))
+        headline = html.H3('All Data')
+        component = html.Div(
+            [headline, text, chart1, chart2], style={"width": "100%"})
+
+    return component
+
+
+dashboardStyle.css
+__________________________________________________
+
+/* dark mode */
+body {
+    background-color: #1f1f1f;
+    color: #f5f5f5;
+}
+
+/* change the color of the H1 element */
+h1 {
+    color: #f5f5f5;
+}
+
+/* change the color of the text of the graph */
+.plotly-graph-div>.plot-bg {
+    fill: #000000;
+}
+
+.top-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 50px;
+}
+
+.dropdown-container {
+    width: 50%;
+    margin-right: 20px;
+}
+
+.graph-container {
+    margin-right: 5%;
+    margin-left: 5%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* Style the dropdown menu */
+.dark-dropdown .Select-control {
+    background-color: rgb(0, 0, 0);
+    color: #3e339c;
+}
+
+/* Style the options in the dropdown menu */
+.dark-dropdown .Select-menu-outer {
+    background-color: #000000;
+    color: #3e339c;
+}
+
+/* Style the selected option in the dropdown menu */
+.dark-dropdown .Select-value-label {
+    background-color: #000000;
+    color: #3e339c;
+}
+
